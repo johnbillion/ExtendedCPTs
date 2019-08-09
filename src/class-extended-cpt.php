@@ -634,22 +634,39 @@ class Extended_CPT {
 			}
 
 			$terms = get_the_terms( $post, $tax );
+
 			if ( $terms ) {
+				$current_term = reset( $terms );
+				$taxonomy_object = get_taxonomy( $tax );
 
-				/**
-				 * Filter the term that gets used in the `$tax` permalink token.
-				 * @TODO make this more betterer ^
-				 *
-				 * @param WP_Term   $term  The `$tax` term to use in the permalink.
-				 * @param WP_Term[] $terms Array of all `$tax` terms associated with the post.
-				 * @param WP_Post   $post  The post in question.
-				 */
-				$term_object = apply_filters( "post_link_{$tax}", reset( $terms ), $terms, $post );
+				# Hierarchical rewrite
+				if ( isset( $taxonomy_object->rewrite['hierarchical'] ) && $taxonomy_object->rewrite['hierarchical'] ) {
+					# https://github.com/WordPress/WordPress/blob/4.9.5/wp-includes/taxonomy.php#L3957-L3965
+					$hierarchical_slugs = [];
+					$ancestors = get_ancestors( $current_term->term_id, $tax, 'taxonomy' );
+					foreach ( (array) $ancestors as $ancestor ) {
+						$ancestor_term = get_term( $ancestor, $tax );
+						$hierarchical_slugs[] = $ancestor_term->slug;
+					}
+					$hierarchical_slugs = array_reverse( $hierarchical_slugs );
+					$hierarchical_slugs[] = $current_term->slug;
+					$term_slug = implode( '/', $hierarchical_slugs );
 
-				$term = get_term( $term_object, $tax )->slug;
+				} else {
+					/**
+					 * Filter the term that gets used in the `$tax` permalink token.
+					 * @TODO make this more betterer ^
+					 *
+					 * @param WP_Term   $current_term  The `$tax` term to use in the permalink.
+					 * @param WP_Term[] $terms Array of all `$tax` terms associated with the post.
+					 * @param WP_Post   $post  The post in question.
+					 */
+					$term = apply_filters( "post_link_{$tax}", $current_term, $terms, $post );
 
+					$term_slug = get_term( $term, $tax )->slug;
+				}
 			} else {
-				$term = $post->post_type;
+				$term_slug = $post->post_type;
 
 				/**
 				 * Filter the default term name that gets used in the `$tax` permalink token.
@@ -663,12 +680,12 @@ class Extended_CPT {
 				if ( $default_term_name ) {
 					$default_term = get_term( $default_term_name, $tax );
 					if ( ! is_wp_error( $default_term ) ) {
-						$term = $default_term->slug;
+						$term_slug = $default_term->slug;
 					}
 				}
 			}
 
-			$replacements[ "%{$tax}%" ] = $term;
+			$replacements[ "%{$tax}%" ] = $term_slug;
 
 		}
 
